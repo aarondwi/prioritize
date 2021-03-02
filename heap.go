@@ -8,14 +8,6 @@ import (
 // HeapPriorityQueue is the simplest priority queue.
 // It is designed using heap as internal data structure,
 // and it does not have any starvation-handling.
-//
-// Our implementation has different semantic on Push/Pop.
-// Push returns error, while Pop waits.
-// This is by design, as we want Push to error fast
-// (to notify customer and not overburden our system),
-// but we want our Pop to wait until a task exists (so can do work).
-//
-// This implementation is goroutine-safe.
 type HeapPriorityQueue struct {
 	mu        *sync.Mutex
 	notEmpty  *sync.Cond

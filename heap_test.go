@@ -2,6 +2,7 @@ package prioritize
 
 import (
 	"log"
+	"math/rand"
 	"testing"
 	"time"
 )
@@ -95,5 +96,18 @@ func TestPopWait(t *testing.T) {
 	result := <-c
 	if !result {
 		t.Fatal("We should receive true, because all the above are true, but we are not")
+	}
+}
+
+func BenchmarkHeapPQ(b *testing.B) {
+	q := NewHeapPriorityQueue(1000)
+
+	for i := 0; i < b.N; i++ {
+		for i := 0; i < 1000; i++ {
+			q.PushOrError(QItem{priority: rand.Intn(64)})
+		}
+		for i := 0; i < 1000; i++ {
+			q.PopOrWait()
+		}
 	}
 }
