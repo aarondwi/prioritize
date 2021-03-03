@@ -40,6 +40,10 @@ func TestInternalSlice(t *testing.T) {
 		t.Fatal("Should be able to push, but we can't")
 	}
 
+	if is.slotsUsedUp() {
+		t.Fatal("tail should not be at end right now. But it is")
+	}
+
 	for i := 0; i < 128; i++ {
 		err := is.push(uint64(i))
 		if err != nil {
@@ -57,6 +61,10 @@ func TestInternalSlice(t *testing.T) {
 	err = is.push(200)
 	if err == nil || err != errSliceIsFull {
 		t.Fatalf("it should return `errSliceIsFull`, but instead we got %v", err)
+	}
+
+	if !is.slotsUsedUp() {
+		t.Fatal("tail should be at end right now and we can no longer pop. But it is not")
 	}
 
 	putInternalSlice(is)

@@ -6,7 +6,9 @@ import (
 	"github.com/aarondwi/prioritize/common"
 )
 
-// HeapPriorityQueue is the simplest priority queue.
+// HeapPriorityQueue is the a priority queue,
+// which always try to return higher priority first
+//
 // It is designed using heap as internal data structure,
 // and it does not have any starvation-handling.
 type HeapPriorityQueue struct {

@@ -35,6 +35,9 @@ func newInternalSlice() *internalSlice {
 }
 
 func putInternalSlice(is *internalSlice) {
+	is.head = 0
+	is.tail = 0
+	is.next = nil
 	internalSlicePool.Put(is)
 }
 
@@ -65,4 +68,8 @@ func (is *internalSlice) canPush() bool {
 
 func (is *internalSlice) isEmpty() bool {
 	return is.head == 0 || is.tail == is.head
+}
+
+func (is *internalSlice) slotsUsedUp() bool {
+	return is.tail == is.sizeLimit
 }
