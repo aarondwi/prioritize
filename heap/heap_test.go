@@ -1,10 +1,12 @@
-package prioritize
+package heap
 
 import (
 	"log"
 	"math/rand"
 	"testing"
 	"time"
+
+	"github.com/aarondwi/prioritize/common"
 )
 
 func swap(arr []int, i1, i2 int) {
@@ -30,28 +32,28 @@ func TestHeapMainFlow(t *testing.T) {
 
 	q := NewHeapPriorityQueue(100)
 	for _, item := range randomizedArr {
-		err := q.PushOrError(QItem{priority: item})
+		err := q.PushOrError(common.QItem{Priority: item})
 		if err != nil {
 			t.Fatal("It should not error because slots still available, but it is")
 		}
 	}
-	err := q.PushOrError(QItem{priority: 1})
+	err := q.PushOrError(common.QItem{Priority: 1})
 	if err == nil {
 		t.Fatal("It should fail because already full, but it is not")
 	}
 
 	for i := 0; i < 100; i++ {
 		item := q.PopOrWait()
-		if item.priority != descSortedArr[i] {
+		if item.Priority != descSortedArr[i] {
 			t.Fatalf(
 				"It should be the same, cause both descending sorted, but instead we got %d and %d",
-				item.priority, descSortedArr[i])
+				item.Priority, descSortedArr[i])
 		}
 	}
 
 	// re-Push, to ensure it works till full again
 	for _, item := range randomizedArr {
-		err := q.PushOrError(QItem{priority: item})
+		err := q.PushOrError(common.QItem{Priority: item})
 		if err != nil {
 			t.Fatal("It should not error because slots still available, but it is")
 		}
@@ -60,10 +62,10 @@ func TestHeapMainFlow(t *testing.T) {
 	// and still sorted after that
 	for i := 0; i < 100; i++ {
 		item := q.PopOrWait()
-		if item.priority != descSortedArr[i] {
+		if item.Priority != descSortedArr[i] {
 			t.Fatalf(
 				"It should be the same, cause both descending sorted, but instead we got %d and %d",
-				item.priority, descSortedArr[i])
+				item.Priority, descSortedArr[i])
 		}
 	}
 }
@@ -80,15 +82,15 @@ func TestPopWait(t *testing.T) {
 
 	go func() {
 		item := q.PopOrWait()
-		if item.priority != 100 {
-			log.Printf("We received priority %d", item.priority)
+		if item.Priority != 100 {
+			log.Printf("We received priority %d\n", item.Priority)
 			c <- false
 		}
 		c <- true
 	}()
 
 	time.Sleep(100 * time.Millisecond)
-	err := q.PushOrError(QItem{priority: 100})
+	err := q.PushOrError(common.QItem{Priority: 100})
 	if err != nil {
 		t.Fatalf("It should not error because slots are available, but we got %v", err)
 	}
@@ -104,7 +106,7 @@ func BenchmarkHeapPQ(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		for i := 0; i < 1000; i++ {
-			q.PushOrError(QItem{priority: rand.Intn(64)})
+			q.PushOrError(common.QItem{Priority: rand.Intn(64)})
 		}
 		for i := 0; i < 1000; i++ {
 			q.PopOrWait()

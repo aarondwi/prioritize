@@ -1,8 +1,9 @@
-package prioritize
+package heap
 
 import (
-	"errors"
 	"sync"
+
+	"github.com/aarondwi/prioritize/common"
 )
 
 // HeapPriorityQueue is the simplest priority queue.
@@ -11,19 +12,21 @@ import (
 type HeapPriorityQueue struct {
 	mu        *sync.Mutex
 	notEmpty  *sync.Cond
-	arr       []QItem
+	arr       []common.QItem
 	size      int
 	sizeLimit int
 }
 
-// NewHeapPriorityQueue setups our priorityqueue with the config
+// NewHeapPriorityQueue setups our priorityqueue with the config.
+//
+// It caps at sizeLimit.
 func NewHeapPriorityQueue(sizeLimit int) *HeapPriorityQueue {
 	mu := &sync.Mutex{}
 	notEmpty := sync.NewCond(mu)
 
-	arr := make([]QItem, sizeLimit)
+	arr := make([]common.QItem, sizeLimit)
 	for i := 0; i < sizeLimit; i++ {
-		arr[i] = MinQItem
+		arr[i] = common.MinQItem
 	}
 	return &HeapPriorityQueue{
 		mu:        mu,
@@ -57,7 +60,7 @@ func (hpq *HeapPriorityQueue) swap(first, second int) {
 }
 
 func (hpq *HeapPriorityQueue) greater(first, second int) bool {
-	return hpq.arr[first].priority > hpq.arr[second].priority
+	return hpq.arr[first].Priority > hpq.arr[second].Priority
 }
 
 func (hpq *HeapPriorityQueue) up(index int) {
@@ -86,16 +89,12 @@ func (hpq *HeapPriorityQueue) down(current int) {
 	}
 }
 
-// ErrHeapIsFull is returned to prevent some task to getting too high latency.
-// Better fail fast than seems as down
-var ErrHeapIsFull = errors.New("heap is full, rejecting new qitem")
-
 // PushOrError pushes an item into the priorityqueue, or returning error if full
-func (hpq *HeapPriorityQueue) PushOrError(item QItem) error {
+func (hpq *HeapPriorityQueue) PushOrError(item common.QItem) error {
 	hpq.mu.Lock()
 	if hpq.size == hpq.sizeLimit {
 		hpq.mu.Unlock()
-		return ErrHeapIsFull
+		return common.ErrQueueIsFull
 	}
 	hpq.arr[hpq.size] = item
 	hpq.up(hpq.size)
@@ -106,14 +105,14 @@ func (hpq *HeapPriorityQueue) PushOrError(item QItem) error {
 }
 
 // PopOrWait remove + returns one item from the priorityqueue, or wait until a task is available
-func (hpq *HeapPriorityQueue) PopOrWait() QItem {
+func (hpq *HeapPriorityQueue) PopOrWait() common.QItem {
 	hpq.mu.Lock()
 	for hpq.size == 0 {
 		hpq.notEmpty.Wait()
 	}
 	top := hpq.arr[0]
 	hpq.arr[0] = hpq.arr[hpq.size-1]
-	hpq.arr[hpq.size-1] = MinQItem
+	hpq.arr[hpq.size-1] = common.MinQItem
 	hpq.size--
 	hpq.down(0)
 	hpq.mu.Unlock()

@@ -1,4 +1,4 @@
-package prioritize
+package common
 
 // QInterface is the interface for queue used inside our main engine
 // You may implement this to create custom priority queuing mechanism

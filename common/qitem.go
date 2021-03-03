@@ -1,4 +1,4 @@
-package prioritize
+package common
 
 import "math"
 
@@ -13,10 +13,10 @@ import "math"
 //
 // Of course, as long as not be used as a pointer individually.
 type QItem struct {
-	id       uint64
-	priority int
+	ID       uint64
+	Priority int
 }
 
 // MinQItem is a holder
 // for the lowest possible priority for an item
-var MinQItem = QItem{priority: math.MinInt32}
+var MinQItem = QItem{Priority: math.MinInt32}
