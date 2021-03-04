@@ -1,34 +1,38 @@
-package common
+package prioritize
 
 import (
 	"context"
 	"sync"
 )
 
-type taskFunc func(context.Context, interface{}) (interface{}, error)
+// TaskFunc is our interface, to be implemented by user
+type TaskFunc func(context.Context, interface{}) (interface{}, error)
 
 // Task is the main object that prioritize schedules.
 // It is is basically a `promise` implementation.
 type Task struct {
-	priority int
 	ctx      context.Context
-	fn       taskFunc
+	priority int
+	fn       TaskFunc
+	arg      interface{}
 	wg       *sync.WaitGroup
 	result   interface{}
 	err      error
 }
 
-// NewTask creates a prioritize.Task object with the given parameter
-func NewTask(
+// newTask creates a prioritize.Task object with the given parameter
+func newTask(
 	ctx context.Context,
 	priority int,
-	fn taskFunc) *Task {
+	fn TaskFunc,
+	arg interface{}) *Task {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	return &Task{
 		ctx:      ctx,
 		priority: priority,
 		fn:       fn,
+		arg:      arg,
 		wg:       wg,
 		result:   nil,
 		err:      nil,

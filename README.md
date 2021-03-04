@@ -12,7 +12,8 @@ notes
 todo
 -------------------------
 
-0. Add core implementation, in which user only needs to submit task
 1. Add `Fair` queue. This type of queue has starvation prevention mechanism.
-2. Allow tuning of worker/queue size, dynamically (or preferable, via dynamic concurrency-limit)
-3. Add some badge, docs, CI pipeline, etc
+2. Allow tuning of worker/queue size, dynamically (or preferable, via dynamic concurrency-limit).
+3. Add some badge, docs, CI pipeline, etc.
+4. Track each goroutine, handle panic, and recover with creating new one if necessary.
+5. Properly handle closing of each queue (need passing `closeChan` to the queue, or manually draining)
