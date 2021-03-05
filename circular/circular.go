@@ -2,6 +2,7 @@ package circular
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/aarondwi/prioritize/common"
 )
@@ -16,6 +17,7 @@ type CircularQueue struct {
 	currentSize int
 	head        int
 	tail        int
+	runningFlag int32
 }
 
 // NewCircularQueue creates a CircularQueue with size n
@@ -31,12 +33,24 @@ func NewCircularQueue(n int) *CircularQueue {
 		currentSize: 0,
 		head:        0,
 		tail:        0,
+		runningFlag: 1,
 	}
 }
 
 // PushOrError item.ID into circularQueue, or fail if no slots available
 func (c *CircularQueue) PushOrError(item common.QItem) error {
+	if running := atomic.LoadInt32(&c.runningFlag); running == 0 {
+		return common.ErrQueueIsClosed
+	}
+
 	c.mu.Lock()
+
+	// double check, ensuring see the changes after lock call
+	if running := atomic.LoadInt32(&c.runningFlag); running == 0 {
+		c.mu.Unlock()
+		return common.ErrQueueIsClosed
+	}
+
 	if c.isFull() {
 		c.mu.Unlock()
 		return common.ErrQueueIsFull
@@ -49,17 +63,35 @@ func (c *CircularQueue) PushOrError(item common.QItem) error {
 	return nil
 }
 
-// PopOrWait returns 1 item from queue, or wait if none exists
-func (c *CircularQueue) PopOrWait() common.QItem {
+// PopOrWaitTillClose returns 1 item from queue, or wait if none exists
+func (c *CircularQueue) PopOrWaitTillClose() (common.QItem, error) {
+	if running := atomic.LoadInt32(&c.runningFlag); running == 0 {
+		return common.MinQItem, common.ErrQueueIsClosed
+	}
+
 	c.mu.Lock()
+
+	// double check, ensuring see the changes after lock call
+	if running := atomic.LoadInt32(&c.runningFlag); running == 0 {
+		c.mu.Unlock()
+		return common.MinQItem, common.ErrQueueIsClosed
+	}
+
 	for c.isEmpty() {
 		c.notEmpty.Wait()
+
+		// double check, ensuring see the changes after wait call
+		if running := atomic.LoadInt32(&c.runningFlag); running == 0 {
+			c.mu.Unlock()
+			return common.MinQItem, common.ErrQueueIsClosed
+		}
 	}
+
 	result := common.QItem{ID: c.arr[c.tail]}
 	c.tail = c.getNextIndex(c.tail)
 	c.currentSize--
 	c.mu.Unlock()
-	return result
+	return result, nil
 }
 
 func (c *CircularQueue) getNextIndex(index int) int {
@@ -77,4 +109,10 @@ func (c *CircularQueue) isFull() bool {
 // isEmpty checks whether circularQueue has remaining slots
 func (c *CircularQueue) isEmpty() bool {
 	return c.currentSize == 0
+}
+
+// Close CircularQueue, preventing it from accepting new request
+func (c *CircularQueue) Close() {
+	atomic.CompareAndSwapInt32(&c.runningFlag, 1, 0)
+	c.notEmpty.Broadcast()
 }

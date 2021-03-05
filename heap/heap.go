@@ -2,6 +2,7 @@ package heap
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/aarondwi/prioritize/common"
 )
@@ -12,11 +13,12 @@ import (
 // It is designed using heap as internal data structure,
 // and it does not have any starvation-handling.
 type HeapPriorityQueue struct {
-	mu        *sync.Mutex
-	notEmpty  *sync.Cond
-	arr       []common.QItem
-	size      int
-	sizeLimit int
+	mu          *sync.Mutex
+	notEmpty    *sync.Cond
+	arr         []common.QItem
+	size        int
+	sizeLimit   int
+	runningFlag int32
 }
 
 // NewHeapPriorityQueue setups our priorityqueue with the config.
@@ -31,11 +33,12 @@ func NewHeapPriorityQueue(sizeLimit int) *HeapPriorityQueue {
 		arr[i] = common.MinQItem
 	}
 	return &HeapPriorityQueue{
-		mu:        mu,
-		notEmpty:  notEmpty,
-		arr:       arr,
-		size:      0,
-		sizeLimit: sizeLimit,
+		mu:          mu,
+		notEmpty:    notEmpty,
+		arr:         arr,
+		size:        0,
+		sizeLimit:   sizeLimit,
+		runningFlag: 1,
 	}
 }
 
@@ -93,7 +96,15 @@ func (hpq *HeapPriorityQueue) down(current int) {
 
 // PushOrError pushes an item into the priorityqueue, or returning error if full
 func (hpq *HeapPriorityQueue) PushOrError(item common.QItem) error {
+	if running := atomic.LoadInt32(&hpq.runningFlag); running == 0 {
+		return common.ErrQueueIsClosed
+	}
+
 	hpq.mu.Lock()
+	if running := atomic.LoadInt32(&hpq.runningFlag); running == 0 {
+		hpq.mu.Unlock()
+		return common.ErrQueueIsClosed
+	}
 	if hpq.size == hpq.sizeLimit {
 		hpq.mu.Unlock()
 		return common.ErrQueueIsFull
@@ -106,11 +117,28 @@ func (hpq *HeapPriorityQueue) PushOrError(item common.QItem) error {
 	return nil
 }
 
-// PopOrWait remove + returns one item from the priorityqueue, or wait until a task is available
-func (hpq *HeapPriorityQueue) PopOrWait() common.QItem {
+// PopOrWaitTillClose remove + returns one item from the priorityqueue, or wait until a task is available
+func (hpq *HeapPriorityQueue) PopOrWaitTillClose() (common.QItem, error) {
+	if running := atomic.LoadInt32(&hpq.runningFlag); running == 0 {
+		return common.MinQItem, common.ErrQueueIsClosed
+	}
+
 	hpq.mu.Lock()
+
+	// double check, ensuring see the changes after lock call
+	if running := atomic.LoadInt32(&hpq.runningFlag); running == 0 {
+		hpq.mu.Unlock()
+		return common.MinQItem, common.ErrQueueIsClosed
+	}
+
 	for hpq.size == 0 {
 		hpq.notEmpty.Wait()
+
+		// double check, ensuring see the changes after wait call
+		if running := atomic.LoadInt32(&hpq.runningFlag); running == 0 {
+			hpq.mu.Unlock()
+			return common.MinQItem, common.ErrQueueIsClosed
+		}
 	}
 	top := hpq.arr[0]
 	hpq.arr[0] = hpq.arr[hpq.size-1]
@@ -118,5 +146,11 @@ func (hpq *HeapPriorityQueue) PopOrWait() common.QItem {
 	hpq.size--
 	hpq.down(0)
 	hpq.mu.Unlock()
-	return top
+	return top, nil
+}
+
+// Close HeapPriorityQueue, preventing it from accepting new request
+func (hpq *HeapPriorityQueue) Close() {
+	atomic.CompareAndSwapInt32(&hpq.runningFlag, 1, 0)
+	hpq.notEmpty.Broadcast()
 }

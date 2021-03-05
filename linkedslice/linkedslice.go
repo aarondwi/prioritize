@@ -3,6 +3,7 @@ package linkedslice
 import (
 	"log"
 	"sync"
+	"sync/atomic"
 
 	"github.com/aarondwi/prioritize/common"
 )
@@ -26,6 +27,7 @@ type LinkedSlice struct {
 	notEmpty    *sync.Cond
 	head        *internalSlice
 	pushPointer *internalSlice
+	runningFlag int32
 }
 
 // NewLinkedSlice creates our LinkedSlice struct
@@ -38,6 +40,7 @@ func NewLinkedSlice() *LinkedSlice {
 		notEmpty:    notEmpty,
 		head:        nil,
 		pushPointer: nil,
+		runningFlag: 1,
 	}
 }
 
@@ -53,7 +56,18 @@ func (ls *LinkedSlice) checkHeadExist() {
 // Any error found results in panic, cause it means either
 // broken implementation, or some environment issue happens (e.g. OOM).
 func (ls *LinkedSlice) PushOrError(item common.QItem) error {
+	if running := atomic.LoadInt32(&ls.runningFlag); running == 0 {
+		return common.ErrQueueIsClosed
+	}
+
 	ls.mu.Lock()
+
+	// double check, ensuring see the changes after lock call
+	if running := atomic.LoadInt32(&ls.runningFlag); running == 0 {
+		ls.mu.Unlock()
+		return common.ErrQueueIsClosed
+	}
+
 	ls.checkHeadExist()
 	if !ls.pushPointer.canPush() { //meaning full already
 		newSlice := internalSlicePool.Get().(*internalSlice)
@@ -70,9 +84,19 @@ func (ls *LinkedSlice) PushOrError(item common.QItem) error {
 	return nil
 }
 
-// PopOrWait returns 1 item from the queue, or wait if none exists
-func (ls *LinkedSlice) PopOrWait() common.QItem {
+// PopOrWaitTillClose returns 1 item from the queue, or wait if none exists
+func (ls *LinkedSlice) PopOrWaitTillClose() (common.QItem, error) {
+	if running := atomic.LoadInt32(&ls.runningFlag); running == 0 {
+		return common.MinQItem, common.ErrQueueIsClosed
+	}
+
 	ls.mu.Lock()
+	// double check, ensuring see the changes after lock call
+	if running := atomic.LoadInt32(&ls.runningFlag); running == 0 {
+		ls.mu.Unlock()
+		return common.MinQItem, common.ErrQueueIsClosed
+	}
+
 	ls.checkHeadExist()
 	// because we handle slotsUsedUp check below
 	// we don't need to check inside this wait-loop
@@ -86,5 +110,11 @@ func (ls *LinkedSlice) PopOrWait() common.QItem {
 		putInternalSlice(usedLS)
 	}
 	ls.mu.Unlock()
-	return common.QItem{ID: result}
+	return common.QItem{ID: result}, nil
+}
+
+// Close LinkedSlice, preventing it from accepting new request
+func (ls *LinkedSlice) Close() {
+	atomic.CompareAndSwapInt32(&ls.runningFlag, 1, 0)
+	ls.notEmpty.Broadcast()
 }

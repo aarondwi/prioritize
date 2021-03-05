@@ -53,7 +53,13 @@ func (e *Engine) workLoop() {
 		case <-e.closeChan:
 			return
 		default:
-			item := e.q.PopOrWait()
+			// we need these to return by themselves.
+			// because probably we already waiting on `PopOrWaitTillClose`
+			// when closeChan is closed
+			item, err := e.q.PopOrWaitTillClose()
+			if err != nil {
+				return
+			}
 
 			e.Lock()
 			task, ok := e.mapping[item.ID]
@@ -99,7 +105,7 @@ func (e *Engine) Submit(
 
 		// Create mapping first.
 		// Because we don't want race condition to happen between
-		// fetching from queue and looking the function to be run
+		// fetching from queue and looking for the task to be run
 		task := newTask(ctx, priority, fn, arg)
 		e.mapping[e.lastID] = task
 
@@ -116,7 +122,8 @@ func (e *Engine) Submit(
 
 // Close the instance, and all background goroutine worker
 //
-// Subsequent request will be rejected
+// Subsequent request will be rejected.
 func (e *Engine) Close() {
 	close(e.closeChan)
+	e.q.Close()
 }

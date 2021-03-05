@@ -43,7 +43,10 @@ func TestHeapMainFlow(t *testing.T) {
 	}
 
 	for i := 0; i < 100; i++ {
-		item := q.PopOrWait()
+		item, err := q.PopOrWaitTillClose()
+		if err != nil {
+			t.Fatalf("it should not error, cause not closed yet, but we got %v", err)
+		}
 		if item.Priority != descSortedArr[i] {
 			t.Fatalf(
 				"It should be the same, cause both descending sorted, but instead we got %d and %d",
@@ -61,13 +64,20 @@ func TestHeapMainFlow(t *testing.T) {
 
 	// and still sorted after that
 	for i := 0; i < 100; i++ {
-		item := q.PopOrWait()
+		item, err := q.PopOrWaitTillClose()
+		if err != nil {
+			if err != nil {
+				t.Fatalf("it should not error, cause not closed yet, but we got %v", err)
+			}
+		}
 		if item.Priority != descSortedArr[i] {
 			t.Fatalf(
 				"It should be the same, cause both descending sorted, but instead we got %d and %d",
 				item.Priority, descSortedArr[i])
 		}
 	}
+
+	q.Close()
 }
 
 func TestPopWait(t *testing.T) {
@@ -81,10 +91,15 @@ func TestPopWait(t *testing.T) {
 	}()
 
 	go func() {
-		item := q.PopOrWait()
+		item, err := q.PopOrWaitTillClose()
+		if err != nil {
+			c <- false
+			return
+		}
 		if item.Priority != 100 {
 			log.Printf("We received priority %d\n", item.Priority)
 			c <- false
+			return
 		}
 		c <- true
 	}()
@@ -99,6 +114,23 @@ func TestPopWait(t *testing.T) {
 	if !result {
 		t.Fatal("We should receive true, because all the above are true, but we are not")
 	}
+
+	q.Close()
+}
+
+func TestHeapAfterClose(t *testing.T) {
+	q := NewHeapPriorityQueue(100)
+	q.Close()
+
+	err := q.PushOrError(common.QItem{})
+	if err == nil || err != common.ErrQueueIsClosed {
+		t.Fatalf("It should be error, cause already closed, but it is not")
+	}
+
+	_, err = q.PopOrWaitTillClose()
+	if err == nil || err != common.ErrQueueIsClosed {
+		t.Fatalf("It should be error, cause already closed, but it is not")
+	}
 }
 
 func BenchmarkHeapPQ(b *testing.B) {
@@ -109,7 +141,9 @@ func BenchmarkHeapPQ(b *testing.B) {
 			q.PushOrError(common.QItem{Priority: rand.Intn(64)})
 		}
 		for i := 0; i < 1000; i++ {
-			q.PopOrWait()
+			q.PopOrWaitTillClose()
 		}
 	}
+
+	q.Close()
 }

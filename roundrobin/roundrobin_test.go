@@ -29,20 +29,30 @@ func TestRoundRobinPriorityQueue(t *testing.T) {
 		t.Fatalf("It should not return error, cause not full yet, but we got %v", err)
 	}
 
-	result := rr.PopOrWait()
+	result, err := rr.PopOrWaitTillClose()
+	if err != nil {
+		t.Fatalf("It should not error, cause not closed yet, but we got %v", err)
+	}
 	if result.ID != 1 || result.Priority != 8 {
 		t.Fatalf("First item should be returned first, but instead we got %v", result)
 	}
 
-	result = rr.PopOrWait()
+	result, err = rr.PopOrWaitTillClose()
+	if err != nil {
+		t.Fatalf("It should not error, cause not closed yet, but we got %v", err)
+	}
 	if result.ID != 3 || result.Priority != 5 {
 		t.Fatalf("Left-hand side of first item should be returned first, but instead we got %v", result)
 	}
 
-	result = rr.PopOrWait()
+	result, err = rr.PopOrWaitTillClose()
+	if err != nil {
+		t.Fatalf("It should not error, cause not closed yet, but we got %v", err)
+	}
 	if result.ID != 2 || result.Priority != 13 {
 		t.Fatalf("After left-hand side, should roll back to higher one, but instead we got %v", result)
 	}
+	rr.Close()
 }
 
 func TestRoundRobinPriorityQueueValidation(t *testing.T) {
@@ -87,6 +97,8 @@ func TestRoundRobinPriorityQueueValidation(t *testing.T) {
 	if err == nil {
 		t.Fatalf("It should error, because no slots left, but it is not")
 	}
+
+	rrpq.Close()
 }
 
 func TestRoundRobinPriorityQueuePopWait(t *testing.T) {
@@ -100,10 +112,15 @@ func TestRoundRobinPriorityQueuePopWait(t *testing.T) {
 	}()
 
 	go func() {
-		item := rrpq.PopOrWait()
+		item, err := rrpq.PopOrWaitTillClose()
+		if err != nil {
+			c <- false
+			return
+		}
 		if item.Priority != 10 {
 			log.Printf("We received priority %d\n", item.Priority)
 			c <- false
+			return
 		}
 		c <- true
 	}()
@@ -117,6 +134,22 @@ func TestRoundRobinPriorityQueuePopWait(t *testing.T) {
 	result := <-c
 	if !result {
 		t.Fatal("We should receive true, because all the above are true, but we are not")
+	}
+	rrpq.Close()
+}
+
+func TestRoundRobinPriorityQueueAfterClose(t *testing.T) {
+	rrpq, _ := NewRoundRobinPriorityQueue(2000, 8)
+	rrpq.Close()
+
+	err := rrpq.PushOrError(common.QItem{})
+	if err == nil || err != common.ErrQueueIsClosed {
+		t.Fatalf("It should be error, cause already closed, but it is not")
+	}
+
+	_, err = rrpq.PopOrWaitTillClose()
+	if err == nil || err != common.ErrQueueIsClosed {
+		t.Fatalf("It should be error, cause already closed, but it is not")
 	}
 }
 
@@ -132,7 +165,9 @@ func BenchmarkRoundRobinPriorityQueue(b *testing.B) {
 			}
 		}
 		for j := 0; j < 1024; j++ {
-			rrpq.PopOrWait()
+			rrpq.PopOrWaitTillClose()
 		}
 	}
+
+	rrpq.Close()
 }

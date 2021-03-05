@@ -12,5 +12,6 @@ package common
 // Those implementing this interface should be thread(goroutine)-safe.
 type QInterface interface {
 	PushOrError(item QItem) error
-	PopOrWait() QItem
+	PopOrWaitTillClose() (QItem, error)
+	Close()
 }
