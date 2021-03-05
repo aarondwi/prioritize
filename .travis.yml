@@ -2,7 +2,7 @@ language: go
 
 branches:
   only:
-    - master
+    - main
 
 script:
   - go test -race -timeout 15s ./...
