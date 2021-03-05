@@ -4,7 +4,7 @@ Prioritizing some tasks over the others, to prevent higher latency for more impo
 Primarily intended for usages in webserver/batch/pipeline, in which some customer
 or their orders should be prioritized over the others.
 
-[![Build Status](https://travis-ci.org/aarondwi/prioritize.svg?branch=master)](https://travis-ci.org/aarondwi/prioritize)
+[![Build Status](https://travis-ci.com/aarondwi/prioritize.svg?branch=main)](https://travis-ci.com/aarondwi/prioritize)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 usages
