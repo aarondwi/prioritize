@@ -170,17 +170,31 @@ func BenchmarkRoundRobinPriorityQueue(b *testing.B) {
 	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
 
 	for i := 0; i < b.N; i++ {
-		for j := 0; j < 1024; j++ {
-			err := rrpq.PushOrError(
+		for j := 0; j < 128; j++ {
+			rrpq.PushOrError(
 				common.QItem{ID: uint64(j), Priority: j % 8})
-			if err != nil {
-				b.Fatalf("It should not error, because slots left, but instead, at iteration %d we got %v", j, err)
-			}
 		}
-		for j := 0; j < 1024; j++ {
+		for j := 0; j < 128; j++ {
 			rrpq.PopOrWaitTillClose()
 		}
 	}
+
+	rrpq.Close()
+}
+
+func BenchmarkRoundRobinPriorityQueueParallel(b *testing.B) {
+	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			for j := 0; j < 128; j++ {
+				rrpq.PushOrError(
+					common.QItem{ID: uint64(j), Priority: j % 8})
+			}
+			for j := 0; j < 128; j++ {
+				rrpq.PopOrWaitTillClose()
+			}
+		}
+	})
 
 	rrpq.Close()
 }

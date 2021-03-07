@@ -86,18 +86,33 @@ func BenchmarkLinkedSlice(b *testing.B) {
 	ls := NewLinkedSlice()
 
 	for i := 0; i < b.N; i++ {
-		r := rand.Intn(2048) + 1
+		r := rand.Intn(128) + 1
 		for j := 0; j < r; j++ {
-			err := ls.PushOrError(common.QItem{ID: uint64(i*2048 + j)})
-			if err != nil {
-				b.Fatalf("it should never error because it is unbounded, but we got %v", err)
-			}
+			ls.PushOrError(common.QItem{ID: uint64(i*128 + j)})
 		}
 		s := rand.Intn(r) + 1
 		for j := 0; j < s; j++ {
 			ls.PopOrWaitTillClose()
 		}
 	}
+
+	ls.Close()
+}
+
+func BenchmarkLinkedSliceParallel(b *testing.B) {
+	ls := NewLinkedSlice()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			r := rand.Intn(128) + 1
+			for j := 0; j < r; j++ {
+				ls.PushOrError(common.QItem{ID: uint64(j)})
+			}
+			s := rand.Intn(r) + 1
+			for j := 0; j < s; j++ {
+				ls.PopOrWaitTillClose()
+			}
+		}
+	})
 
 	ls.Close()
 }

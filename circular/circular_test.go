@@ -111,17 +111,29 @@ func TestCircularQueueAfterClose(t *testing.T) {
 }
 
 func BenchmarkCircularQueue(b *testing.B) {
-	cq := NewCircularQueue(100)
+	cq := NewCircularQueue(128)
 	for i := 0; i < b.N; i++ {
-		for j := 0; j < 10; j++ {
-			err := cq.PushOrError(common.QItem{ID: uint64(j)})
-			if err != nil {
-				b.Fatalf("On Push, should always be ok, but it is not, on iteration %d -> %d", i, j)
-			}
+		for j := 0; j < 128; j++ {
+			cq.PushOrError(common.QItem{ID: uint64(j)})
 		}
-		for j := 0; j < 10; j++ {
+		for j := 0; j < 128; j++ {
 			cq.PopOrWaitTillClose()
 		}
 	}
+	cq.Close()
+}
+
+func BenchmarkCircularQueueParallel(b *testing.B) {
+	cq := NewCircularQueue(1024 * 2)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			for j := 0; j < 128; j++ {
+				cq.PushOrError(common.QItem{ID: uint64(j)})
+			}
+			for j := 0; j < 128; j++ {
+				cq.PopOrWaitTillClose()
+			}
+		}
+	})
 	cq.Close()
 }
