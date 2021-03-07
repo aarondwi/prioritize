@@ -2,7 +2,6 @@ package circular
 
 import (
 	"sync"
-	"sync/atomic"
 
 	"github.com/aarondwi/prioritize/common"
 )
@@ -17,7 +16,7 @@ type CircularQueue struct {
 	currentSize int
 	head        int
 	tail        int
-	runningFlag int32
+	running     bool
 }
 
 // NewCircularQueue creates a CircularQueue with size n
@@ -33,20 +32,14 @@ func NewCircularQueue(n int) *CircularQueue {
 		currentSize: 0,
 		head:        0,
 		tail:        0,
-		runningFlag: 1,
+		running:     true,
 	}
 }
 
 // PushOrError item.ID into circularQueue, or fail if no slots available
 func (c *CircularQueue) PushOrError(item common.QItem) error {
-	if running := atomic.LoadInt32(&c.runningFlag); running == 0 {
-		return common.ErrQueueIsClosed
-	}
-
 	c.mu.Lock()
-
-	// double check, ensuring see the changes after lock call
-	if running := atomic.LoadInt32(&c.runningFlag); running == 0 {
+	if !c.running {
 		c.mu.Unlock()
 		return common.ErrQueueIsClosed
 	}
@@ -65,14 +58,8 @@ func (c *CircularQueue) PushOrError(item common.QItem) error {
 
 // PopOrWaitTillClose returns 1 item from queue, or wait if none exists
 func (c *CircularQueue) PopOrWaitTillClose() (common.QItem, error) {
-	if running := atomic.LoadInt32(&c.runningFlag); running == 0 {
-		return common.MinQItem, common.ErrQueueIsClosed
-	}
-
 	c.mu.Lock()
-
-	// double check, ensuring see the changes after lock call
-	if running := atomic.LoadInt32(&c.runningFlag); running == 0 {
+	if !c.running {
 		c.mu.Unlock()
 		return common.MinQItem, common.ErrQueueIsClosed
 	}
@@ -81,7 +68,7 @@ func (c *CircularQueue) PopOrWaitTillClose() (common.QItem, error) {
 		c.notEmpty.Wait()
 
 		// double check, ensuring see the changes after wait call
-		if running := atomic.LoadInt32(&c.runningFlag); running == 0 {
+		if !c.running {
 			c.mu.Unlock()
 			return common.MinQItem, common.ErrQueueIsClosed
 		}
@@ -113,6 +100,8 @@ func (c *CircularQueue) isEmpty() bool {
 
 // Close CircularQueue, preventing it from accepting new request
 func (c *CircularQueue) Close() {
-	atomic.CompareAndSwapInt32(&c.runningFlag, 1, 0)
+	c.mu.Lock()
+	c.running = false
 	c.notEmpty.Broadcast()
+	c.mu.Unlock()
 }

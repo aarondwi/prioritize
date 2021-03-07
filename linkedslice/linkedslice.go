@@ -3,7 +3,6 @@ package linkedslice
 import (
 	"log"
 	"sync"
-	"sync/atomic"
 
 	"github.com/aarondwi/prioritize/common"
 )
@@ -27,7 +26,7 @@ type LinkedSlice struct {
 	notEmpty    *sync.Cond
 	head        *internalSlice
 	pushPointer *internalSlice
-	runningFlag int32
+	running     bool
 }
 
 // NewLinkedSlice creates our LinkedSlice struct
@@ -40,7 +39,7 @@ func NewLinkedSlice() *LinkedSlice {
 		notEmpty:    notEmpty,
 		head:        nil,
 		pushPointer: nil,
-		runningFlag: 1,
+		running:     true,
 	}
 }
 
@@ -56,14 +55,10 @@ func (ls *LinkedSlice) checkHeadExist() {
 // Any error found results in panic, cause it means either
 // broken implementation, or some environment issue happens (e.g. OOM).
 func (ls *LinkedSlice) PushOrError(item common.QItem) error {
-	if running := atomic.LoadInt32(&ls.runningFlag); running == 0 {
-		return common.ErrQueueIsClosed
-	}
-
 	ls.mu.Lock()
 
 	// double check, ensuring see the changes after lock call
-	if running := atomic.LoadInt32(&ls.runningFlag); running == 0 {
+	if !ls.running {
 		ls.mu.Unlock()
 		return common.ErrQueueIsClosed
 	}
@@ -86,13 +81,9 @@ func (ls *LinkedSlice) PushOrError(item common.QItem) error {
 
 // PopOrWaitTillClose returns 1 item from the queue, or wait if none exists
 func (ls *LinkedSlice) PopOrWaitTillClose() (common.QItem, error) {
-	if running := atomic.LoadInt32(&ls.runningFlag); running == 0 {
-		return common.MinQItem, common.ErrQueueIsClosed
-	}
-
 	ls.mu.Lock()
 	// double check, ensuring see the changes after lock call
-	if running := atomic.LoadInt32(&ls.runningFlag); running == 0 {
+	if !ls.running {
 		ls.mu.Unlock()
 		return common.MinQItem, common.ErrQueueIsClosed
 	}
@@ -115,6 +106,8 @@ func (ls *LinkedSlice) PopOrWaitTillClose() (common.QItem, error) {
 
 // Close LinkedSlice, preventing it from accepting new request
 func (ls *LinkedSlice) Close() {
-	atomic.CompareAndSwapInt32(&ls.runningFlag, 1, 0)
+	ls.mu.Lock()
+	ls.running = false
 	ls.notEmpty.Broadcast()
+	ls.mu.Unlock()
 }

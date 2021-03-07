@@ -21,6 +21,13 @@ type Task struct {
 }
 
 // newTask creates a prioritize.Task object with the given parameter
+//
+// I don't think, currently, exposing this to public is good idea.
+// If it is published, I would be tempted to make `GetTask` and `PutTask` API,
+// because pooling will make this library faster.
+//
+// But that also opens a bad chance for user to misuse the api (waiting for already-put Task, etc)
+// which would make a lot more problem to explain.
 func newTask(
 	ctx context.Context,
 	priority int,

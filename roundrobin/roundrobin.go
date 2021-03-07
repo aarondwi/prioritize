@@ -2,7 +2,6 @@ package roundrobin
 
 import (
 	"sync"
-	"sync/atomic"
 
 	"github.com/aarondwi/prioritize/common"
 	"github.com/aarondwi/prioritize/linkedslice"
@@ -37,7 +36,7 @@ type RoundRobinPriorityQueue struct {
 	size                      int
 	sizeLimit                 int
 	currentPriorityToRetrieve int
-	runningFlag               int32
+	running                   bool
 }
 
 // NewRoundRobinPriorityQueue creates our RR PQ.
@@ -63,27 +62,20 @@ func NewRoundRobinPriorityQueue(sizeLimit, numOfPriority int) (*RoundRobinPriori
 		size:                      0,
 		sizeLimit:                 sizeLimit,
 		currentPriorityToRetrieve: -1,
-		runningFlag:               1,
+		running:                   true,
 	}, nil
 }
 
 // PushOrError put the item into the rrpq, and returns error if no slot available
 func (rr *RoundRobinPriorityQueue) PushOrError(item common.QItem) error {
-	if running := atomic.LoadInt32(&rr.runningFlag); running == 0 {
-		return common.ErrQueueIsClosed
-	}
 	if item.Priority < 0 || item.Priority >= rr.limitPriority {
 		return common.ErrPriorityOutOfRange
 	}
 
 	rr.mu.Lock()
-
-	// double check, ensuring see the changes after lock call
-	if running := atomic.LoadInt32(&rr.runningFlag); running == 0 {
+	if !rr.running {
+		rr.mu.Unlock()
 		return common.ErrQueueIsClosed
-	}
-	if item.Priority < 0 || item.Priority >= rr.limitPriority {
-		return common.ErrPriorityOutOfRange
 	}
 
 	if rr.size == rr.sizeLimit {
@@ -117,14 +109,8 @@ func (rr *RoundRobinPriorityQueue) PushOrError(item common.QItem) error {
 
 // PopOrWaitTillClose returns 1 QItem from RRPQ, or waits if none exists
 func (rr *RoundRobinPriorityQueue) PopOrWaitTillClose() (common.QItem, error) {
-	if running := atomic.LoadInt32(&rr.runningFlag); running == 0 {
-		return common.MinQItem, common.ErrQueueIsClosed
-	}
-
 	rr.mu.Lock()
-
-	// double check, ensuring see the changes after lock call
-	if running := atomic.LoadInt32(&rr.runningFlag); running == 0 {
+	if !rr.running {
 		rr.mu.Unlock()
 		return common.MinQItem, common.ErrQueueIsClosed
 	}
@@ -132,7 +118,7 @@ func (rr *RoundRobinPriorityQueue) PopOrWaitTillClose() (common.QItem, error) {
 	for rr.size == 0 {
 		rr.notEmpty.Wait()
 		// double check, ensuring see the changes after wait call
-		if running := atomic.LoadInt32(&rr.runningFlag); running == 0 {
+		if !rr.running {
 			rr.mu.Unlock()
 			return common.MinQItem, common.ErrQueueIsClosed
 		}
@@ -185,9 +171,8 @@ func (rr *RoundRobinPriorityQueue) PopOrWaitTillClose() (common.QItem, error) {
 
 // Close RoundRobinPriorityQueue, preventing it from accepting new request
 func (rr *RoundRobinPriorityQueue) Close() {
-	atomic.CompareAndSwapInt32(&rr.runningFlag, 1, 0)
-
 	rr.mu.Lock()
+	rr.running = false
 	for i := 0; i < rr.limitPriority; i++ {
 		if rr.queues[i] != nil {
 			rr.queues[i].Close()
