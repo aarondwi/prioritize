@@ -1,7 +1,6 @@
 package roundrobin
 
 import (
-	"errors"
 	"sync"
 	"sync/atomic"
 
@@ -26,12 +25,12 @@ type RoundRobinPriorityQueue struct {
 	notEmpty *sync.Cond
 
 	// we separate number tracking from the priorityQueues
-	// so checking numberOfTasksInEachQueue just need 1 cache miss (putting into cpu cache)
+	// so checking numberOfTasksInEachQueue just need 1 cache miss (putting into cpu L1 cache)
 	numberOfTasksInEachQueue []int
 
 	// we also create separate queues for each priority
 	// so it is simple to push/pop the item
-	priorityQueues map[int]*linkedslice.LinkedSlice
+	queues []*linkedslice.LinkedSlice
 
 	// simple metadata
 	limitPriority             int
@@ -41,28 +40,25 @@ type RoundRobinPriorityQueue struct {
 	runningFlag               int32
 }
 
-// ErrParamShouldBePositive is returned when either sizeLimit or priority parameter is negative
-var ErrParamShouldBePositive = errors.New("sizeLimit and priority given should be positive")
-
 // NewRoundRobinPriorityQueue creates our RR PQ.
 //
 // It caps at sizeLimit, and allows priorirty [0,numOfPriority)
 func NewRoundRobinPriorityQueue(sizeLimit, numOfPriority int) (*RoundRobinPriorityQueue, error) {
+	if sizeLimit <= 0 || numOfPriority <= 0 {
+		return nil, common.ErrParamShouldBePositive
+	}
+
 	mu := &sync.Mutex{}
 	notEmpty := sync.NewCond(mu)
 
-	if sizeLimit <= 0 || numOfPriority <= 0 {
-		return nil, ErrParamShouldBePositive
-	}
-
 	numberOfTasksInEachQueue := make([]int, numOfPriority)
-	priorityQueues := make(map[int]*linkedslice.LinkedSlice)
+	queues := make([]*linkedslice.LinkedSlice, numOfPriority)
 
 	return &RoundRobinPriorityQueue{
 		mu:                        mu,
 		notEmpty:                  notEmpty,
 		numberOfTasksInEachQueue:  numberOfTasksInEachQueue,
-		priorityQueues:            priorityQueues,
+		queues:                    queues,
 		limitPriority:             numOfPriority,
 		size:                      0,
 		sizeLimit:                 sizeLimit,
@@ -71,19 +67,13 @@ func NewRoundRobinPriorityQueue(sizeLimit, numOfPriority int) (*RoundRobinPriori
 	}, nil
 }
 
-// ErrPriorityOutOfRange is returned if priority given is outside of range/
-//
-// If we accept it, to maintain the guarantee, needs to maintain too much queue,
-// and hard to scan over.
-var ErrPriorityOutOfRange = errors.New("Roundrobin Priority Queue is full, rejecting new qitem")
-
 // PushOrError put the item into the rrpq, and returns error if no slot available
 func (rr *RoundRobinPriorityQueue) PushOrError(item common.QItem) error {
 	if running := atomic.LoadInt32(&rr.runningFlag); running == 0 {
 		return common.ErrQueueIsClosed
 	}
 	if item.Priority < 0 || item.Priority >= rr.limitPriority {
-		return ErrPriorityOutOfRange
+		return common.ErrPriorityOutOfRange
 	}
 
 	rr.mu.Lock()
@@ -93,17 +83,22 @@ func (rr *RoundRobinPriorityQueue) PushOrError(item common.QItem) error {
 		return common.ErrQueueIsClosed
 	}
 	if item.Priority < 0 || item.Priority >= rr.limitPriority {
-		return ErrPriorityOutOfRange
+		return common.ErrPriorityOutOfRange
 	}
 
 	if rr.size == rr.sizeLimit {
 		rr.mu.Unlock()
 		return common.ErrQueueIsFull
 	}
-	if _, ok := rr.priorityQueues[item.Priority]; !ok {
-		rr.priorityQueues[item.Priority] = linkedslice.NewLinkedSlice()
+	if rr.queues[item.Priority] == nil {
+		rr.queues[item.Priority] = linkedslice.NewLinkedSlice()
 	}
-	rr.priorityQueues[item.Priority].PushOrError(item)
+	err := rr.queues[item.Priority].PushOrError(item)
+	if err != nil {
+		// meaning already closed, cause linkedslices is unbounded
+		rr.mu.Unlock()
+		return err
+	}
 
 	// The only item in the queue, set this to position
 	if rr.size == 0 {
@@ -145,7 +140,7 @@ func (rr *RoundRobinPriorityQueue) PopOrWaitTillClose() (common.QItem, error) {
 
 	// if we wait blindly, it gonna stuck
 	// but we are tracking it manually, ensuring it will never wait
-	qitem, err := rr.priorityQueues[rr.currentPriorityToRetrieve].PopOrWaitTillClose()
+	qitem, err := rr.queues[rr.currentPriorityToRetrieve].PopOrWaitTillClose()
 	if err != nil {
 		// the only error possible here is closed already
 		// so we just continue it
@@ -172,8 +167,9 @@ func (rr *RoundRobinPriorityQueue) PopOrWaitTillClose() (common.QItem, error) {
 			}
 		}
 		// not yet found, meaning remaining items reside on higher index
+		// currentPriorityToRetrieve should be the last index to be checked
 		if newPos == -1 {
-			for i := rr.limitPriority - 1; i > rr.currentPriorityToRetrieve; i-- {
+			for i := rr.limitPriority - 1; i >= rr.currentPriorityToRetrieve; i-- {
 				if rr.numberOfTasksInEachQueue[i] > 0 {
 					newPos = i
 					break
@@ -190,10 +186,13 @@ func (rr *RoundRobinPriorityQueue) PopOrWaitTillClose() (common.QItem, error) {
 // Close RoundRobinPriorityQueue, preventing it from accepting new request
 func (rr *RoundRobinPriorityQueue) Close() {
 	atomic.CompareAndSwapInt32(&rr.runningFlag, 1, 0)
-	rr.notEmpty.Broadcast()
+
+	rr.mu.Lock()
 	for i := 0; i < rr.limitPriority; i++ {
-		if _, ok := rr.priorityQueues[i]; ok {
-			rr.priorityQueues[i].Close()
+		if rr.queues[i] != nil {
+			rr.queues[i].Close()
 		}
 	}
+	rr.notEmpty.Broadcast()
+	rr.mu.Unlock()
 }

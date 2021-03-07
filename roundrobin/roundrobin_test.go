@@ -29,6 +29,11 @@ func TestRoundRobinPriorityQueue(t *testing.T) {
 		t.Fatalf("It should not return error, cause not full yet, but we got %v", err)
 	}
 
+	err = rr.PushOrError(common.QItem{ID: 4, Priority: 13})
+	if err != nil {
+		t.Fatalf("It should not return error, cause not full yet, but we got %v", err)
+	}
+
 	result, err := rr.PopOrWaitTillClose()
 	if err != nil {
 		t.Fatalf("It should not error, cause not closed yet, but we got %v", err)
@@ -52,17 +57,25 @@ func TestRoundRobinPriorityQueue(t *testing.T) {
 	if result.ID != 2 || result.Priority != 13 {
 		t.Fatalf("After left-hand side, should roll back to higher one, but instead we got %v", result)
 	}
+
+	result, err = rr.PopOrWaitTillClose()
+	if err != nil {
+		t.Fatalf("It should not error, cause not closed yet, but we got %v", err)
+	}
+	if result.ID != 4 || result.Priority != 13 {
+		t.Fatalf("After left-hand side, should roll back to higher one, but instead we got %v", result)
+	}
 	rr.Close()
 }
 
 func TestRoundRobinPriorityQueueValidation(t *testing.T) {
 	_, err := NewRoundRobinPriorityQueue(-2048, 1)
-	if err == nil {
+	if err == nil || err != common.ErrParamShouldBePositive {
 		t.Fatal("It should error, cause sizeLimit can't be negative, but it is not")
 	}
 
 	_, err = NewRoundRobinPriorityQueue(2048, -16)
-	if err == nil {
+	if err == nil || err != common.ErrParamShouldBePositive {
 		t.Fatal("It should error, cause numOfPriority can't be negative, but it is not")
 	}
 
@@ -72,12 +85,12 @@ func TestRoundRobinPriorityQueueValidation(t *testing.T) {
 	}
 
 	err = rrpq.PushOrError(common.QItem{Priority: -1})
-	if err == nil || err != ErrPriorityOutOfRange {
+	if err == nil || err != common.ErrPriorityOutOfRange {
 		t.Fatal("It should error, cause cannot accept negative priority, but it is not")
 	}
 
 	err = rrpq.PushOrError(common.QItem{Priority: 16})
-	if err == nil || err != ErrPriorityOutOfRange {
+	if err == nil || err != common.ErrPriorityOutOfRange {
 		t.Fatal("It should error, cause can only accept priority [0, numOfPriority), but it is not")
 	}
 
