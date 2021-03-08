@@ -135,7 +135,15 @@ func TestHeapAfterClose(t *testing.T) {
 
 func BenchmarkHeapPQ(b *testing.B) {
 	q := NewHeapPriorityQueue(1024)
+	for i := 0; i < b.N; i++ {
+		q.PushOrError(common.QItem{Priority: rand.Intn(64)})
+		q.PopOrWaitTillClose()
+	}
+	q.Close()
+}
 
+func BenchmarkHeapPQInLoop(b *testing.B) {
+	q := NewHeapPriorityQueue(1024)
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < 128; j++ {
 			q.PushOrError(common.QItem{Priority: rand.Intn(64)})
@@ -144,11 +152,21 @@ func BenchmarkHeapPQ(b *testing.B) {
 			q.PopOrWaitTillClose()
 		}
 	}
-
 	q.Close()
 }
 
 func BenchmarkHeapPQParallel(b *testing.B) {
+	q := NewHeapPriorityQueue(1024 * 2)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			q.PushOrError(common.QItem{Priority: rand.Intn(64)})
+			q.PopOrWaitTillClose()
+		}
+	})
+	q.Close()
+}
+
+func BenchmarkHeapPQInLoopParallel(b *testing.B) {
 	q := NewHeapPriorityQueue(1024 * 2)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {

@@ -168,7 +168,16 @@ func TestRoundRobinPriorityQueueAfterClose(t *testing.T) {
 
 func BenchmarkRoundRobinPriorityQueue(b *testing.B) {
 	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
+	for i := 0; i < b.N; i++ {
+		rrpq.PushOrError(
+			common.QItem{ID: uint64(i), Priority: i % 8})
+		rrpq.PopOrWaitTillClose()
+	}
+	rrpq.Close()
+}
 
+func BenchmarkRoundRobinPriorityQueueInLoop(b *testing.B) {
+	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < 128; j++ {
 			rrpq.PushOrError(
@@ -178,11 +187,24 @@ func BenchmarkRoundRobinPriorityQueue(b *testing.B) {
 			rrpq.PopOrWaitTillClose()
 		}
 	}
-
 	rrpq.Close()
 }
 
 func BenchmarkRoundRobinPriorityQueueParallel(b *testing.B) {
+	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
+	b.RunParallel(func(pb *testing.PB) {
+		j := 0
+		for pb.Next() {
+			j++
+			rrpq.PushOrError(
+				common.QItem{ID: uint64(j), Priority: j % 8})
+			rrpq.PopOrWaitTillClose()
+		}
+	})
+	rrpq.Close()
+}
+
+func BenchmarkRoundRobinPriorityQueueInLoopParallel(b *testing.B) {
 	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -195,6 +217,5 @@ func BenchmarkRoundRobinPriorityQueueParallel(b *testing.B) {
 			}
 		}
 	})
-
 	rrpq.Close()
 }

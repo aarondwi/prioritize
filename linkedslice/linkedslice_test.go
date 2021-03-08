@@ -2,7 +2,6 @@ package linkedslice
 
 import (
 	"log"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -84,18 +83,23 @@ func TestLinkedSliceAfterClose(t *testing.T) {
 
 func BenchmarkLinkedSlice(b *testing.B) {
 	ls := NewLinkedSlice()
-
 	for i := 0; i < b.N; i++ {
-		r := rand.Intn(128) + 1
-		for j := 0; j < r; j++ {
+		ls.PushOrError(common.QItem{ID: uint64(i)})
+		ls.PopOrWaitTillClose()
+	}
+	ls.Close()
+}
+
+func BenchmarkLinkedSliceInLoop(b *testing.B) {
+	ls := NewLinkedSlice()
+	for i := 0; i < b.N; i++ {
+		for j := 0; j < 128; j++ {
 			ls.PushOrError(common.QItem{ID: uint64(i*128 + j)})
 		}
-		s := rand.Intn(r) + 1
-		for j := 0; j < s; j++ {
+		for j := 0; j < 128; j++ {
 			ls.PopOrWaitTillClose()
 		}
 	}
-
 	ls.Close()
 }
 
@@ -103,16 +107,24 @@ func BenchmarkLinkedSliceParallel(b *testing.B) {
 	ls := NewLinkedSlice()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			r := rand.Intn(128) + 1
-			for j := 0; j < r; j++ {
+			ls.PushOrError(common.QItem{})
+			ls.PopOrWaitTillClose()
+		}
+	})
+	ls.Close()
+}
+
+func BenchmarkLinkedSliceInLoopParallel(b *testing.B) {
+	ls := NewLinkedSlice()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			for j := 0; j < 128; j++ {
 				ls.PushOrError(common.QItem{ID: uint64(j)})
 			}
-			s := rand.Intn(r) + 1
-			for j := 0; j < s; j++ {
+			for j := 0; j < 128; j++ {
 				ls.PopOrWaitTillClose()
 			}
 		}
 	})
-
 	ls.Close()
 }
