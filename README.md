@@ -7,6 +7,13 @@ or their orders should be prioritized over the others.
 [![Build Status](https://travis-ci.com/aarondwi/prioritize.svg?branch=main)](https://travis-ci.com/aarondwi/prioritize)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+Installation
+-------------------------
+
+```bash
+go get -u github.com/aarondwi/prioritize
+```
+
 Usages
 -------------------------
 
