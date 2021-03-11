@@ -3,6 +3,7 @@ package heap
 import (
 	"log"
 	"math/rand"
+	"runtime"
 	"testing"
 	"time"
 
@@ -152,6 +153,34 @@ func BenchmarkHeapPQInLoop(b *testing.B) {
 			q.PopOrWaitTillClose()
 		}
 	}
+	q.Close()
+}
+
+func BenchmarkHeapPQParallelOneCoreOnly(b *testing.B) {
+	q := NewHeapPriorityQueue(1024 * 2)
+	runtime.GOMAXPROCS(1)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			q.PushOrError(common.QItem{Priority: rand.Intn(64)})
+			q.PopOrWaitTillClose()
+		}
+	})
+	q.Close()
+}
+
+func BenchmarkHeapPQInLoopParallelOneCoreOnly(b *testing.B) {
+	q := NewHeapPriorityQueue(1024 * 2)
+	runtime.GOMAXPROCS(1)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			for i := 0; i < 128; i++ {
+				q.PushOrError(common.QItem{Priority: rand.Intn(64)})
+			}
+			for i := 0; i < 128; i++ {
+				q.PopOrWaitTillClose()
+			}
+		}
+	})
 	q.Close()
 }
 

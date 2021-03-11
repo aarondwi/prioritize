@@ -2,6 +2,7 @@ package circular
 
 import (
 	"log"
+	"runtime"
 	"testing"
 	"time"
 
@@ -129,6 +130,34 @@ func BenchmarkCircularQueueInLoop(b *testing.B) {
 			cq.PopOrWaitTillClose()
 		}
 	}
+	cq.Close()
+}
+
+func BenchmarkCircularQueueParallelOneCoreOnly(b *testing.B) {
+	cq := NewCircularQueue(1024 * 2)
+	runtime.GOMAXPROCS(1)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			cq.PushOrError(common.QItem{})
+			cq.PopOrWaitTillClose()
+		}
+	})
+	cq.Close()
+}
+
+func BenchmarkCircularQueueInLoopParallelOneCoreOnly(b *testing.B) {
+	cq := NewCircularQueue(1024 * 2)
+	runtime.GOMAXPROCS(1)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			for j := 0; j < 128; j++ {
+				cq.PushOrError(common.QItem{ID: uint64(j)})
+			}
+			for j := 0; j < 128; j++ {
+				cq.PopOrWaitTillClose()
+			}
+		}
+	})
 	cq.Close()
 }
 

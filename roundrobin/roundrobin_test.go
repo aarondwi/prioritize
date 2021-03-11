@@ -2,6 +2,7 @@ package roundrobin
 
 import (
 	"log"
+	"runtime"
 	"testing"
 	"time"
 
@@ -187,6 +188,38 @@ func BenchmarkRoundRobinPriorityQueueInLoop(b *testing.B) {
 			rrpq.PopOrWaitTillClose()
 		}
 	}
+	rrpq.Close()
+}
+
+func BenchmarkRoundRobinPriorityQueueParallelOneCoreOnly(b *testing.B) {
+	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
+	runtime.GOMAXPROCS(1)
+	b.RunParallel(func(pb *testing.PB) {
+		j := 0
+		for pb.Next() {
+			j++
+			rrpq.PushOrError(
+				common.QItem{ID: uint64(j), Priority: j % 8})
+			rrpq.PopOrWaitTillClose()
+		}
+	})
+	rrpq.Close()
+}
+
+func BenchmarkRoundRobinPriorityQueueInLoopParallelOneCoreOnly(b *testing.B) {
+	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
+	runtime.GOMAXPROCS(1)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			for j := 0; j < 128; j++ {
+				rrpq.PushOrError(
+					common.QItem{ID: uint64(j), Priority: j % 8})
+			}
+			for j := 0; j < 128; j++ {
+				rrpq.PopOrWaitTillClose()
+			}
+		}
+	})
 	rrpq.Close()
 }
 

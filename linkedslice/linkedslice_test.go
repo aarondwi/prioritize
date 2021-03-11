@@ -2,6 +2,7 @@ package linkedslice
 
 import (
 	"log"
+	"runtime"
 	"testing"
 	"time"
 
@@ -100,6 +101,34 @@ func BenchmarkLinkedSliceInLoop(b *testing.B) {
 			ls.PopOrWaitTillClose()
 		}
 	}
+	ls.Close()
+}
+
+func BenchmarkLinkedSliceParallelOneCoreOnly(b *testing.B) {
+	ls := NewLinkedSlice()
+	runtime.GOMAXPROCS(1)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			ls.PushOrError(common.QItem{})
+			ls.PopOrWaitTillClose()
+		}
+	})
+	ls.Close()
+}
+
+func BenchmarkLinkedSliceInLoopParallelOneCoreOnly(b *testing.B) {
+	ls := NewLinkedSlice()
+	runtime.GOMAXPROCS(1)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			for j := 0; j < 128; j++ {
+				ls.PushOrError(common.QItem{ID: uint64(j)})
+			}
+			for j := 0; j < 128; j++ {
+				ls.PopOrWaitTillClose()
+			}
+		}
+	})
 	ls.Close()
 }
 
