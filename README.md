@@ -29,8 +29,8 @@ Notes
 Built-in Supported Queues
 -------------------------
 
-1. [Heap](https://github.com/aarondwi/prioritize/tree/main/heap): Bounded, priority straight based on higher priority first
-2. [Fair](https://github.com/aarondwi/prioritize/tree/main/fair): Bounded fair queue. Starting from first item put, that same priority is prioritized last after that
+1. [Priority](https://github.com/aarondwi/prioritize/tree/main/priority): Item taken straight based on higher priority first.
+2. [Fair](https://github.com/aarondwi/prioritize/tree/main/fair): Item taken starting from first item put, that same priority is prioritized last after that.
 
 TODO
 -------------------------

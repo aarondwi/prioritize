@@ -66,7 +66,7 @@ func NewFairQueue(sizeLimit, numOfPriority int) (*FairQueue, error) {
 	}, nil
 }
 
-// PushOrError put the item into the rrpq, and returns error if no slot available
+// PushOrError put the item into the fq, and returns error if no slot available
 func (fq *FairQueue) PushOrError(item common.QItem) error {
 	if item.Priority < 0 || item.Priority >= fq.limitPriority {
 		return common.ErrPriorityOutOfRange
@@ -77,17 +77,17 @@ func (fq *FairQueue) PushOrError(item common.QItem) error {
 		fq.mu.Unlock()
 		return common.ErrQueueIsClosed
 	}
-
 	if fq.size == fq.sizeLimit {
 		fq.mu.Unlock()
 		return common.ErrQueueIsFull
 	}
+
 	if fq.queues[item.Priority] == nil {
 		fq.queues[item.Priority] = linkedslice.NewLinkedSlice()
 	}
 	err := fq.queues[item.Priority].PushOrError(item)
+	// meaning already closed, cause linkedslices is unbounded
 	if err != nil {
-		// meaning already closed, cause linkedslices is unbounded
 		fq.mu.Unlock()
 		return err
 	}
@@ -100,14 +100,13 @@ func (fq *FairQueue) PushOrError(item common.QItem) error {
 	// update the tracker too
 	fq.numberOfTasksInEachQueue[item.Priority]++
 	fq.size++
+
 	fq.notEmpty.Signal()
-
 	fq.mu.Unlock()
-
 	return nil
 }
 
-// PopOrWaitTillClose returns 1 QItem from RRPQ, or waits if none exists
+// PopOrWaitTillClose returns 1 QItem from fq, or waits if none exists
 func (fq *FairQueue) PopOrWaitTillClose() (common.QItem, error) {
 	fq.mu.Lock()
 	if !fq.running {

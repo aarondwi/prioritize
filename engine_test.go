@@ -4,11 +4,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aarondwi/prioritize/heap"
+	"github.com/aarondwi/prioritize/fair"
 )
 
 func TestPrioritizeEngine(t *testing.T) {
-	engine, err := New(heap.NewHeapPriorityQueue(100), 5)
+	fq, _ := fair.NewFairQueue(2048, 16)
+	engine, err := New(fq, 5)
 	if err != nil {
 		t.Fatalf("It should not error, because all are correct parameters, instead we got %v", err)
 	}
@@ -33,7 +34,8 @@ func TestPrioritizeEngine(t *testing.T) {
 }
 
 func TestPriorityEngineCtxFinished(t *testing.T) {
-	engine, err := New(heap.NewHeapPriorityQueue(100), 5)
+	fq, _ := fair.NewFairQueue(2048, 16)
+	engine, err := New(fq, 5)
 	if err != nil {
 		t.Fatalf("It should not error, because all are correct parameters, instead we got %v", err)
 	}
@@ -57,7 +59,8 @@ func TestPriorityEngineCtxFinished(t *testing.T) {
 }
 
 func TestSubmitCallAfterClose(t *testing.T) {
-	engine, err := New(heap.NewHeapPriorityQueue(100), 5)
+	fq, _ := fair.NewFairQueue(2048, 16)
+	engine, err := New(fq, 5)
 	if err != nil {
 		t.Fatalf("It should not error, because all are correct parameters, instead we got %v", err)
 	}
