@@ -1,4 +1,4 @@
-package roundrobin
+package fair
 
 import (
 	"sync"
@@ -7,7 +7,7 @@ import (
 	"github.com/aarondwi/prioritize/linkedslice"
 )
 
-// RoundRobinPriorityQueue is a priority queue in which
+// FairQueue is a queue in which
 // each priority gets a chance to return value,
 // starting from first item put going downwards,
 // and then rolled back from highest.
@@ -17,8 +17,8 @@ import (
 // else it gonna be pretty much not useful, just like random/normal queue.
 //
 // Internally, we are using unbounded linkedslice.
-// Because we may have limits, but each priority can takes up to that limit, and using linkedslice can reduce unwanted memory usage.
-type RoundRobinPriorityQueue struct {
+// But because we need size limits, we track it here
+type FairQueue struct {
 	// synchronization primitive
 	mu       *sync.Mutex
 	notEmpty *sync.Cond
@@ -39,10 +39,10 @@ type RoundRobinPriorityQueue struct {
 	running                   bool
 }
 
-// NewRoundRobinPriorityQueue creates our RR PQ.
+// NewFairQueue creates our fair queue.
 //
 // It caps at sizeLimit, and allows priorirty [0,numOfPriority)
-func NewRoundRobinPriorityQueue(sizeLimit, numOfPriority int) (*RoundRobinPriorityQueue, error) {
+func NewFairQueue(sizeLimit, numOfPriority int) (*FairQueue, error) {
 	if sizeLimit <= 0 || numOfPriority <= 0 {
 		return nil, common.ErrParamShouldBePositive
 	}
@@ -53,7 +53,7 @@ func NewRoundRobinPriorityQueue(sizeLimit, numOfPriority int) (*RoundRobinPriori
 	numberOfTasksInEachQueue := make([]int, numOfPriority)
 	queues := make([]*linkedslice.LinkedSlice, numOfPriority)
 
-	return &RoundRobinPriorityQueue{
+	return &FairQueue{
 		mu:                        mu,
 		notEmpty:                  notEmpty,
 		numberOfTasksInEachQueue:  numberOfTasksInEachQueue,
@@ -67,87 +67,87 @@ func NewRoundRobinPriorityQueue(sizeLimit, numOfPriority int) (*RoundRobinPriori
 }
 
 // PushOrError put the item into the rrpq, and returns error if no slot available
-func (rr *RoundRobinPriorityQueue) PushOrError(item common.QItem) error {
-	if item.Priority < 0 || item.Priority >= rr.limitPriority {
+func (fq *FairQueue) PushOrError(item common.QItem) error {
+	if item.Priority < 0 || item.Priority >= fq.limitPriority {
 		return common.ErrPriorityOutOfRange
 	}
 
-	rr.mu.Lock()
-	if !rr.running {
-		rr.mu.Unlock()
+	fq.mu.Lock()
+	if !fq.running {
+		fq.mu.Unlock()
 		return common.ErrQueueIsClosed
 	}
 
-	if rr.size == rr.sizeLimit {
-		rr.mu.Unlock()
+	if fq.size == fq.sizeLimit {
+		fq.mu.Unlock()
 		return common.ErrQueueIsFull
 	}
-	if rr.queues[item.Priority] == nil {
-		rr.queues[item.Priority] = linkedslice.NewLinkedSlice()
+	if fq.queues[item.Priority] == nil {
+		fq.queues[item.Priority] = linkedslice.NewLinkedSlice()
 	}
-	err := rr.queues[item.Priority].PushOrError(item)
+	err := fq.queues[item.Priority].PushOrError(item)
 	if err != nil {
 		// meaning already closed, cause linkedslices is unbounded
-		rr.mu.Unlock()
+		fq.mu.Unlock()
 		return err
 	}
 
 	// The only item in the queue, set this to position
-	if rr.size == 0 {
-		rr.currentPriorityToRetrieve = item.Priority
+	if fq.size == 0 {
+		fq.currentPriorityToRetrieve = item.Priority
 	}
 
 	// update the tracker too
-	rr.numberOfTasksInEachQueue[item.Priority]++
-	rr.size++
-	rr.notEmpty.Signal()
+	fq.numberOfTasksInEachQueue[item.Priority]++
+	fq.size++
+	fq.notEmpty.Signal()
 
-	rr.mu.Unlock()
+	fq.mu.Unlock()
 
 	return nil
 }
 
 // PopOrWaitTillClose returns 1 QItem from RRPQ, or waits if none exists
-func (rr *RoundRobinPriorityQueue) PopOrWaitTillClose() (common.QItem, error) {
-	rr.mu.Lock()
-	if !rr.running {
-		rr.mu.Unlock()
+func (fq *FairQueue) PopOrWaitTillClose() (common.QItem, error) {
+	fq.mu.Lock()
+	if !fq.running {
+		fq.mu.Unlock()
 		return common.MinQItem, common.ErrQueueIsClosed
 	}
 
-	for rr.size == 0 {
-		rr.notEmpty.Wait()
+	for fq.size == 0 {
+		fq.notEmpty.Wait()
 		// double check, ensuring see the changes after wait call
-		if !rr.running {
-			rr.mu.Unlock()
+		if !fq.running {
+			fq.mu.Unlock()
 			return common.MinQItem, common.ErrQueueIsClosed
 		}
 	}
 
 	// if we wait blindly, it gonna stuck
 	// but we are tracking it manually, ensuring it will never wait
-	qitem, err := rr.queues[rr.currentPriorityToRetrieve].PopOrWaitTillClose()
+	qitem, err := fq.queues[fq.currentPriorityToRetrieve].PopOrWaitTillClose()
 	if err != nil {
 		// the only error possible here is closed already
 		// so we just continue it
-		rr.mu.Unlock()
+		fq.mu.Unlock()
 		return common.MinQItem, err
 	}
 	result := common.QItem{
 		ID:       qitem.ID,
-		Priority: rr.currentPriorityToRetrieve,
+		Priority: fq.currentPriorityToRetrieve,
 	}
-	rr.numberOfTasksInEachQueue[rr.currentPriorityToRetrieve]--
-	rr.size--
+	fq.numberOfTasksInEachQueue[fq.currentPriorityToRetrieve]--
+	fq.size--
 
-	if rr.size == 0 {
+	if fq.size == 0 {
 		//fast path, no need to check rr.numberOfTasksInEachQueue
-		rr.currentPriorityToRetrieve = -1
+		fq.currentPriorityToRetrieve = -1
 	} else {
 		// Check new rr.currentPosToRetrieve position, cause we still have item somewhere
 		newPos := -1
-		for i := rr.currentPriorityToRetrieve - 1; i >= 0; i-- {
-			if rr.numberOfTasksInEachQueue[i] > 0 {
+		for i := fq.currentPriorityToRetrieve - 1; i >= 0; i-- {
+			if fq.numberOfTasksInEachQueue[i] > 0 {
 				newPos = i
 				break
 			}
@@ -155,29 +155,29 @@ func (rr *RoundRobinPriorityQueue) PopOrWaitTillClose() (common.QItem, error) {
 		// not yet found, meaning remaining items reside on higher index
 		// currentPriorityToRetrieve should be the last index to be checked
 		if newPos == -1 {
-			for i := rr.limitPriority - 1; i >= rr.currentPriorityToRetrieve; i-- {
-				if rr.numberOfTasksInEachQueue[i] > 0 {
+			for i := fq.limitPriority - 1; i >= fq.currentPriorityToRetrieve; i-- {
+				if fq.numberOfTasksInEachQueue[i] > 0 {
 					newPos = i
 					break
 				}
 			}
 		}
-		rr.currentPriorityToRetrieve = newPos
+		fq.currentPriorityToRetrieve = newPos
 	}
 
-	rr.mu.Unlock()
+	fq.mu.Unlock()
 	return result, nil
 }
 
-// Close RoundRobinPriorityQueue, preventing it from accepting new request
-func (rr *RoundRobinPriorityQueue) Close() {
-	rr.mu.Lock()
-	rr.running = false
-	for i := 0; i < rr.limitPriority; i++ {
-		if rr.queues[i] != nil {
-			rr.queues[i].Close()
+// Close FairQueue, preventing it from accepting new request
+func (fq *FairQueue) Close() {
+	fq.mu.Lock()
+	fq.running = false
+	for i := 0; i < fq.limitPriority; i++ {
+		if fq.queues[i] != nil {
+			fq.queues[i].Close()
 		}
 	}
-	rr.notEmpty.Broadcast()
-	rr.mu.Unlock()
+	fq.notEmpty.Broadcast()
+	fq.mu.Unlock()
 }

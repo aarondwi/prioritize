@@ -1,4 +1,4 @@
-package roundrobin
+package fair
 
 import (
 	"log"
@@ -9,8 +9,8 @@ import (
 	"github.com/aarondwi/prioritize/common"
 )
 
-func TestRoundRobinPriorityQueue(t *testing.T) {
-	rr, err := NewRoundRobinPriorityQueue(2048, 16)
+func TestFairQueue(t *testing.T) {
+	rr, err := NewFairQueue(2048, 16)
 	if err != nil {
 		t.Fatalf("It should not error, cause both are positive, but we got %v", err)
 	}
@@ -69,18 +69,18 @@ func TestRoundRobinPriorityQueue(t *testing.T) {
 	rr.Close()
 }
 
-func TestRoundRobinPriorityQueueValidation(t *testing.T) {
-	_, err := NewRoundRobinPriorityQueue(-2048, 1)
+func TestFairQueueValidation(t *testing.T) {
+	_, err := NewFairQueue(-2048, 1)
 	if err == nil || err != common.ErrParamShouldBePositive {
 		t.Fatal("It should error, cause sizeLimit can't be negative, but it is not")
 	}
 
-	_, err = NewRoundRobinPriorityQueue(2048, -16)
+	_, err = NewFairQueue(2048, -16)
 	if err == nil || err != common.ErrParamShouldBePositive {
 		t.Fatal("It should error, cause numOfPriority can't be negative, but it is not")
 	}
 
-	rrpq, err := NewRoundRobinPriorityQueue(2048, 16)
+	rrpq, err := NewFairQueue(2048, 16)
 	if err != nil {
 		t.Fatalf("It should not error, instead we got %v", err)
 	}
@@ -115,8 +115,8 @@ func TestRoundRobinPriorityQueueValidation(t *testing.T) {
 	rrpq.Close()
 }
 
-func TestRoundRobinPriorityQueuePopWait(t *testing.T) {
-	rrpq, err := NewRoundRobinPriorityQueue(100, 16)
+func TestFairQueuePopWait(t *testing.T) {
+	rrpq, err := NewFairQueue(100, 16)
 
 	c := make(chan bool, 1)
 	go func() {
@@ -152,8 +152,8 @@ func TestRoundRobinPriorityQueuePopWait(t *testing.T) {
 	rrpq.Close()
 }
 
-func TestRoundRobinPriorityQueueAfterClose(t *testing.T) {
-	rrpq, _ := NewRoundRobinPriorityQueue(2000, 8)
+func TestFairQueueAfterClose(t *testing.T) {
+	rrpq, _ := NewFairQueue(2000, 8)
 	rrpq.Close()
 
 	err := rrpq.PushOrError(common.QItem{})
@@ -167,8 +167,8 @@ func TestRoundRobinPriorityQueueAfterClose(t *testing.T) {
 	}
 }
 
-func BenchmarkRoundRobinPriorityQueue(b *testing.B) {
-	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
+func BenchmarkFairQueue(b *testing.B) {
+	rrpq, _ := NewFairQueue(1024, 8)
 	for i := 0; i < b.N; i++ {
 		rrpq.PushOrError(
 			common.QItem{ID: uint64(i), Priority: i % 8})
@@ -177,8 +177,8 @@ func BenchmarkRoundRobinPriorityQueue(b *testing.B) {
 	rrpq.Close()
 }
 
-func BenchmarkRoundRobinPriorityQueueInLoop(b *testing.B) {
-	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
+func BenchmarkFairQueueInLoop(b *testing.B) {
+	rrpq, _ := NewFairQueue(1024, 8)
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < 128; j++ {
 			rrpq.PushOrError(
@@ -191,8 +191,8 @@ func BenchmarkRoundRobinPriorityQueueInLoop(b *testing.B) {
 	rrpq.Close()
 }
 
-func BenchmarkRoundRobinPriorityQueueParallelOneCoreOnly(b *testing.B) {
-	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
+func BenchmarkFairQueueParallelOneCoreOnly(b *testing.B) {
+	rrpq, _ := NewFairQueue(1024, 8)
 	runtime.GOMAXPROCS(1)
 	b.RunParallel(func(pb *testing.PB) {
 		j := 0
@@ -206,8 +206,8 @@ func BenchmarkRoundRobinPriorityQueueParallelOneCoreOnly(b *testing.B) {
 	rrpq.Close()
 }
 
-func BenchmarkRoundRobinPriorityQueueInLoopParallelOneCoreOnly(b *testing.B) {
-	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
+func BenchmarkFairQueueInLoopParallelOneCoreOnly(b *testing.B) {
+	rrpq, _ := NewFairQueue(1024, 8)
 	runtime.GOMAXPROCS(1)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -223,8 +223,8 @@ func BenchmarkRoundRobinPriorityQueueInLoopParallelOneCoreOnly(b *testing.B) {
 	rrpq.Close()
 }
 
-func BenchmarkRoundRobinPriorityQueueParallel(b *testing.B) {
-	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
+func BenchmarkFairQueueParallel(b *testing.B) {
+	rrpq, _ := NewFairQueue(1024, 8)
 	b.RunParallel(func(pb *testing.PB) {
 		j := 0
 		for pb.Next() {
@@ -237,8 +237,8 @@ func BenchmarkRoundRobinPriorityQueueParallel(b *testing.B) {
 	rrpq.Close()
 }
 
-func BenchmarkRoundRobinPriorityQueueInLoopParallel(b *testing.B) {
-	rrpq, _ := NewRoundRobinPriorityQueue(1024, 8)
+func BenchmarkFairQueueInLoopParallel(b *testing.B) {
+	rrpq, _ := NewFairQueue(1024, 8)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			for j := 0; j < 128; j++ {

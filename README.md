@@ -30,7 +30,7 @@ Built-in Supported Queues
 -------------------------
 
 1. [Heap](https://github.com/aarondwi/prioritize/tree/main/heap): Bounded, priority straight based on higher priority first
-2. [Roundrobin](https://github.com/aarondwi/prioritize/tree/main/roundrobin): Bounded, priority is roundrobin, starting from first item put. The same priority is prioritized last after that
+2. [Fair](https://github.com/aarondwi/prioritize/tree/main/fair): Bounded fair queue. Starting from first item put, that same priority is prioritized last after that
 
 TODO
 -------------------------
